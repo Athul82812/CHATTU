@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "CHATTU",
+    "slug": "chattu",
+    "version": "1.0.0",
+    "orientation": "portrait",
+
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FF8C00"
+    },
+
+    "assetBundlePatterns": ["**/*"],
+
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.athul.chattu"
+    },
+
+    "android": {
+      "package": "com.athul.chattu",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FF8C00"
+      },
+      "statusBarColor": "#FF8C00"
+    },
+
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
