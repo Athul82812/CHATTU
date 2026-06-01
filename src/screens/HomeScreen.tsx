@@ -5,68 +5,101 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
+  Image,
 } from "react-native";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { db, auth } from "../services/firebase";
 
-type UserItem = {
-  id: string;
-  email: string;
-  online?: boolean;
-};
+import { auth, db } from "../services/firebase";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  orderBy,
+} from "firebase/firestore";
 
 export default function HomeScreen({ navigation }: any) {
-  const [users, setUsers] = useState<UserItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const currentUser = auth.currentUser;
+  const [chats, setChats] = useState<any[]>([]);
 
+  // REAL FIREBASE CHAT LIST
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!currentUser) return;
 
     const q = query(
-      collection(db, "users"),
-      where("uid", "!=", auth.currentUser.uid)
+      collection(db, "chats"),
+      where("participants", "array-contains", currentUser.uid),
+      orderBy("updatedAt", "desc")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as any),
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
       }));
 
-      setUsers(list);
-      setLoading(false);
+      setChats(data);
     });
 
-    return unsub;
+    return unsubscribe;
   }, []);
+
+  const openChat = (item: any) => {
+    const otherUserId = item.participants.find(
+      (id: string) => id !== currentUser?.uid
+    );
+
+    navigation.navigate("Chat", {
+      chatId: item.id,
+      otherUserId,
+    });
+  };
+
+  const renderItem = ({ item }: any) => (
+    <TouchableOpacity
+      style={styles.chatCard}
+      onPress={() => openChat(item)}
+    >
+      <Image
+        source={{ uri: "https://i.pravatar.cc/150" }}
+        style={styles.avatar}
+      />
+
+      <View style={styles.chatInfo}>
+        <Text style={styles.name}>
+          Chat User
+        </Text>
+
+        <Text style={styles.message} numberOfLines={1}>
+          {item.lastMessage || "No messages yet"}
+        </Text>
+      </View>
+
+      <Text style={styles.time}>now</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>CHATTU</Text>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <Text style={styles.title}>CHATTU</Text>
 
-      {loading ? (
-        <Text style={styles.info}>Loading users...</Text>
-      ) : users.length === 0 ? (
-        <Text style={styles.info}>No users available</Text>
-      ) : (
-        <FlatList
-          data={users}
-          keyExtractor={(i) => i.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.user}
-              onPress={() =>
-                navigation.navigate("Chat", { userId: item.id })
-              }
-            >
-              <Text style={styles.name}>{item.email}</Text>
-              <Text style={{ color: item.online ? "green" : "gray" }}>
-                {item.online ? "Online" : "Offline"}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-      )}
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Profile")}
+        >
+          <Text style={styles.profileBtn}>Profile</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* CHAT LIST */}
+      <FlatList
+        data={chats}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        ListEmptyComponent={
+          <Text style={styles.empty}>No chats yet</Text>
+        }
+      />
     </View>
   );
 }
@@ -74,26 +107,69 @@ export default function HomeScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: "#0b0f1a",
+    paddingTop: 40,
   },
+
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 15,
+    alignItems: "center",
+  },
+
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "bold",
-    marginBottom: 20,
+    color: "#38bdf8",
   },
-  user: {
+
+  profileBtn: {
+    color: "#38bdf8",
+    fontWeight: "600",
+  },
+
+  chatCard: {
+    flexDirection: "row",
+    alignItems: "center",
     padding: 15,
-    borderBottomWidth: 1,
-    borderColor: "#e5e7eb",
+    marginHorizontal: 15,
+    marginBottom: 10,
+    backgroundColor: "#111827",
+    borderRadius: 16,
   },
+
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+
+  chatInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
   name: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
-  info: {
-    textAlign: "center",
+
+  message: {
+    color: "#9ca3af",
+    marginTop: 3,
+  },
+
+  time: {
     color: "#6b7280",
-    marginTop: 20,
+    fontSize: 12,
+  },
+
+  empty: {
+    color: "#6b7280",
+    textAlign: "center",
+    marginTop: 50,
   },
 });

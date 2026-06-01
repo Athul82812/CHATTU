@@ -13,65 +13,49 @@ import { auth } from "../services/firebase";
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Enter email and password");
-      return;
-    }
-
     try {
-      setLoading(true);
-
       await signInWithEmailAndPassword(auth, email, password);
-
-      // DO NOT navigate manually if you later use auth listener
       navigation.replace("Home");
-
-    } catch (error: any) {
-      Alert.alert("Login Failed", error.message);
-    } finally {
-      setLoading(false);
+    } catch (err: any) {
+      Alert.alert("Login Failed", err.message);
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>CHATTU 💬</Text>
+      <Text style={styles.logo}>CHATTU</Text>
+      <Text style={styles.subtitle}>Connect with friends</Text>
 
-      <TextInput
-        placeholder="Email"
-        placeholderTextColor="#aaa"
-        value={email}
-        onChangeText={setEmail}
-        style={styles.input}
-        autoCapitalize="none"
-      />
+      <View style={styles.card}>
+        <TextInput
+          placeholder="Email"
+          placeholderTextColor="#777"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+        />
 
-      <TextInput
-        placeholder="Password"
-        placeholderTextColor="#aaa"
-        value={password}
-        onChangeText={setPassword}
-        style={styles.input}
-        secureTextEntry
-      />
+        <TextInput
+          placeholder="Password"
+          placeholderTextColor="#777"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+          style={styles.input}
+        />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>
-          {loading ? "Logging in..." : "Login"}
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={handleLogin}>
+          <Text style={styles.buttonText}>Login</Text>
+        </TouchableOpacity>
 
-      {/* SIGNUP LINK (IMPORTANT) */}
-      <TouchableOpacity
-        onPress={() => navigation.navigate("Signup")}
-      >
-        <Text style={styles.link}>
-          Don't have an account? Sign Up
-        </Text>
-      </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+          <Text style={styles.link}>
+            Don't have an account? Sign up
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -79,29 +63,38 @@ export default function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b1220",
+    backgroundColor: "#0b0f1a",
     justifyContent: "center",
     padding: 20,
   },
-  title: {
-    fontSize: 32,
+  logo: {
+    fontSize: 40,
+    fontWeight: "bold",
     color: "#38bdf8",
     textAlign: "center",
+  },
+  subtitle: {
+    color: "#aaa",
+    textAlign: "center",
     marginBottom: 30,
-    fontWeight: "bold",
+  },
+  card: {
+    backgroundColor: "#111827",
+    padding: 20,
+    borderRadius: 16,
   },
   input: {
-    backgroundColor: "#111827",
+    backgroundColor: "#0b1220",
     padding: 12,
     borderRadius: 10,
-    color: "#fff",
     marginBottom: 10,
+    color: "#fff",
   },
   button: {
     backgroundColor: "#38bdf8",
     padding: 14,
-    borderRadius: 10,
-    marginTop: 5,
+    borderRadius: 12,
+    marginTop: 10,
   },
   buttonText: {
     textAlign: "center",

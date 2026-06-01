@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,8 +6,11 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+
+import { auth, db } from "../services/firebase";
 import {
   collection,
   addDoc,
@@ -15,209 +18,174 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
-  doc,
-  setDoc,
-  updateDoc,
-  getDoc,
 } from "firebase/firestore";
-import { db, auth } from "../services/firebase";
 
 export default function ChatScreen({ route }: any) {
-  const { userId } = route.params;
+  const { user } = route.params;
 
-  const myId = auth.currentUser?.uid;
-  if (!myId) return null; // 🛡️ prevent crash
-
-  // 🔐 stable chatId
-  const chatId =
-    myId < userId ? `${myId}_${userId}` : `${userId}_${myId}`;
+  const currentUser = auth.currentUser;
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
-  const flatListRef = useRef<FlatList>(null);
 
-  // 🔹 ensure chat document exists
-  useEffect(() => {
-    const ensureChat = async () => {
-      try {
-        const chatRef = doc(db, "chats", chatId);
-        const snap = await getDoc(chatRef);
+  // CHAT ID (unique between 2 users)
+  const chatId =
+    currentUser!.uid > user.id
+      ? `${currentUser!.uid}_${user.id}`
+      : `${user.id}_${currentUser!.uid}`;
 
-        if (!snap.exists()) {
-          await setDoc(chatRef, {
-            users: [myId, userId],
-            createdAt: serverTimestamp(),
-            lastMessage: "",
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch (e) {
-        console.log("ensureChat error:", e);
-      }
-    };
-
-    ensureChat();
-  }, [chatId]);
-
-  // 🔥 load messages
+  // REAL-TIME LISTENER
   useEffect(() => {
     const q = query(
       collection(db, "chats", chatId, "messages"),
       orderBy("createdAt", "asc")
     );
 
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
       }));
-      setMessages(data);
-
-      // 👀 mark received messages as seen
-      data.forEach((msg: any) => {
-        if (msg.senderId !== myId && !msg.seen) {
-          updateDoc(
-            doc(db, "chats", chatId, "messages", msg.id),
-            { seen: true }
-          );
-        }
-      });
+      setMessages(msgs);
     });
 
-    return unsub;
-  }, [chatId]);
+    return unsubscribe;
+  }, []);
 
-  // 📩 send message
+  // SEND MESSAGE
   const sendMessage = async () => {
     if (!message.trim()) return;
 
     try {
       await addDoc(collection(db, "chats", chatId, "messages"), {
         text: message,
-        senderId: myId,
+        senderId: currentUser?.uid,
         createdAt: serverTimestamp(),
-        seen: false,
-      });
-
-      await updateDoc(doc(db, "chats", chatId), {
-        lastMessage: message,
-        updatedAt: serverTimestamp(),
       });
 
       setMessage("");
-    } catch (e) {
-      Alert.alert("Error", "Message not sent");
+    } catch (err) {
+      console.log(err);
     }
   };
 
-  // ❌ delete message (soft delete)
-  const deleteMessage = (id: string) => {
-    Alert.alert("Delete", "Delete this message?", [
-      { text: "Cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await updateDoc(
-              doc(db, "chats", chatId, "messages", id),
-              { text: "❌ Message deleted" }
-            );
-          } catch (e) {
-            console.log("delete error:", e);
-          }
-        },
-      },
-    ]);
+  const renderItem = ({ item }: any) => {
+    const isMe = item.senderId === currentUser?.uid;
+
+    return (
+      <View
+        style={[
+          styles.messageBox,
+          isMe ? styles.myMessage : styles.otherMessage,
+        ]}
+      >
+        <Text style={styles.messageText}>{item.text}</Text>
+      </View>
+    );
   };
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(i) => i.id}
-        onContentSizeChange={() =>
-          setTimeout(
-            () => flatListRef.current?.scrollToEnd({ animated: true }),
-            100
-          )
-        }
-        renderItem={({ item }) => {
-          const isMe = item.senderId === myId;
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      {/* HEADER */}
+      <View style={styles.header}>
+        <Text style={styles.name}>{user.name}</Text>
+      </View>
 
-          return (
-            <TouchableOpacity
-              onLongPress={() => deleteMessage(item.id)}
-              style={[styles.msg, isMe ? styles.me : styles.other]}
-            >
-              <Text style={styles.text}>{item.text}</Text>
-              {isMe && (
-                <Text style={styles.seen}>
-                  {item.seen ? "✓✓ Seen" : "✓ Sent"}
-                </Text>
-              )}
-            </TouchableOpacity>
-          );
-        }}
+      {/* CHAT */}
+      <FlatList
+        data={messages}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={styles.chatArea}
       />
 
-      <View style={styles.row}>
+      {/* INPUT */}
+      <View style={styles.inputBox}>
         <TextInput
           value={message}
           onChangeText={setMessage}
           placeholder="Message..."
-          placeholderTextColor="#94a3b8"
+          placeholderTextColor="#6b7280"
           style={styles.input}
         />
 
-        <TouchableOpacity style={styles.btn} onPress={sendMessage}>
-          <Text style={{ fontWeight: "bold" }}>Send</Text>
+        <TouchableOpacity style={styles.sendBtn} onPress={sendMessage}>
+          <Text style={{ color: "#000", fontWeight: "bold" }}>
+            Send
+          </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b1220",
-    padding: 10,
+    backgroundColor: "#0b0f1a",
   },
-  msg: {
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 8,
+
+  header: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1f2937",
+    alignItems: "center",
+  },
+
+  name: {
+    color: "#38bdf8",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+
+  chatArea: {
+    padding: 15,
+  },
+
+  messageBox: {
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 10,
     maxWidth: "75%",
   },
-  me: {
+
+  myMessage: {
     backgroundColor: "#38bdf8",
     alignSelf: "flex-end",
   },
-  other: {
+
+  otherMessage: {
     backgroundColor: "#111827",
     alignSelf: "flex-start",
   },
-  text: { color: "#fff" },
-  seen: {
-    fontSize: 10,
-    color: "#e5e7eb",
-    marginTop: 4,
-    textAlign: "right",
+
+  messageText: {
+    color: "#fff",
   },
-  row: { flexDirection: "row", marginTop: 10 },
+
+  inputBox: {
+    flexDirection: "row",
+    padding: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#1f2937",
+  },
+
   input: {
     flex: 1,
     backgroundColor: "#111827",
+    borderRadius: 12,
     padding: 10,
-    borderRadius: 10,
     color: "#fff",
   },
-  btn: {
+
+  sendBtn: {
+    marginLeft: 10,
     backgroundColor: "#38bdf8",
-    padding: 10,
-    marginLeft: 8,
+    paddingHorizontal: 15,
+    justifyContent: "center",
     borderRadius: 10,
   },
 });
