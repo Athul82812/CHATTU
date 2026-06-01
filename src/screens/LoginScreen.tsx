@@ -8,42 +8,29 @@ import {
   Alert,
 } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "../services/firebase";
+import { auth } from "../services/firebase";
 
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter email and password");
+      Alert.alert("Error", "Enter email and password");
       return;
     }
 
     try {
       setLoading(true);
 
-      const res = await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email, password);
 
-      // Create / merge user document safely
-      await setDoc(
-        doc(db, "users", res.user.uid),
-        {
-          uid: res.user.uid,
-          email: res.user.email,
-          online: true,
-          typing: false,
-          lastSeen: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      // DO NOT navigate manually if you later use auth listener
+      navigation.replace("Home");
 
-      // ❌ DO NOT navigate manually
-      // AppNavigator will handle routing automatically
-    } catch (err: any) {
-      Alert.alert("Login Failed", err.message);
+    } catch (error: any) {
+      Alert.alert("Login Failed", error.message);
     } finally {
       setLoading(false);
     }
@@ -55,30 +42,34 @@ export default function LoginScreen() {
 
       <TextInput
         placeholder="Email"
-        placeholderTextColor="#94a3b8"
-        autoCapitalize="none"
-        keyboardType="email-address"
+        placeholderTextColor="#aaa"
         value={email}
         onChangeText={setEmail}
         style={styles.input}
+        autoCapitalize="none"
       />
 
       <TextInput
         placeholder="Password"
-        placeholderTextColor="#94a3b8"
-        secureTextEntry
+        placeholderTextColor="#aaa"
         value={password}
         onChangeText={setPassword}
         style={styles.input}
+        secureTextEntry
       />
 
-      <TouchableOpacity
-        style={[styles.btn, loading && { opacity: 0.7 }]}
-        onPress={handleLogin}
-        disabled={loading}
-      >
-        <Text style={styles.btnText}>
+      <TouchableOpacity style={styles.button} onPress={handleLogin}>
+        <Text style={styles.buttonText}>
           {loading ? "Logging in..." : "Login"}
+        </Text>
+      </TouchableOpacity>
+
+      {/* SIGNUP LINK (IMPORTANT) */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("Signup")}
+      >
+        <Text style={styles.link}>
+          Don't have an account? Sign Up
         </Text>
       </TouchableOpacity>
     </View>
@@ -97,6 +88,7 @@ const styles = StyleSheet.create({
     color: "#38bdf8",
     textAlign: "center",
     marginBottom: 30,
+    fontWeight: "bold",
   },
   input: {
     backgroundColor: "#111827",
@@ -105,14 +97,20 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginBottom: 10,
   },
-  btn: {
+  button: {
     backgroundColor: "#38bdf8",
     padding: 14,
     borderRadius: 10,
+    marginTop: 5,
   },
-  btnText: {
+  buttonText: {
     textAlign: "center",
     fontWeight: "bold",
     color: "#000",
+  },
+  link: {
+    color: "#38bdf8",
+    textAlign: "center",
+    marginTop: 15,
   },
 });
