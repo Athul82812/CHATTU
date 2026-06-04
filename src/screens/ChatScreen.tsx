@@ -1,85 +1,78 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   FlatList,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
 } from "react-native";
 
-import { auth, db } from "../services/firebase";
+import { supabase } from "../supabase/supabase";
 import {
-  collection,
-  addDoc,
-  query,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-} from "firebase/firestore";
+  sendMessage,
+  subscribeToMessages,
+} from "../services/chatService";
 
-export default function ChatScreen({ route }: any) {
-  const { user } = route.params;
+export default function ChatScreen({ route, navigation }: any) {
+  const { chatId, userId: paramUserId, userName: paramUserName, otherUserName } = route.params;
+  const [userId, setUserId] = useState(paramUserId);
+  const [userName, setUserName] = useState(paramUserName);
 
-  const currentUser = auth.currentUser;
-
-  const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
+  const [text, setText] = useState("");
 
-  // CHAT ID (unique between 2 users)
-  const chatId =
-    currentUser!.uid > user.id
-      ? `${currentUser!.uid}_${user.id}`
-      : `${user.id}_${currentUser!.uid}`;
+  const flatListRef = useRef<FlatList>(null);
 
-  // REAL-TIME LISTENER
   useEffect(() => {
-    const q = query(
-      collection(db, "chats", chatId, "messages"),
-      orderBy("createdAt", "asc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setMessages(msgs);
-    });
-
-    return unsubscribe;
+    if (!userId) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        const user = session?.user;
+        if (user) {
+          setUserId(user.id);
+          setUserName(user.user_metadata?.full_name || user.email || "User");
+        }
+      });
+    }
   }, []);
 
-  // SEND MESSAGE
-  const sendMessage = async () => {
-    if (!message.trim()) return;
+  useEffect(() => {
+    const unsubscribe = subscribeToMessages(chatId, (msgs) => {
+      setMessages(msgs);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
 
-    try {
-      await addDoc(collection(db, "chats", chatId, "messages"), {
-        text: message,
-        senderId: currentUser?.uid,
-        createdAt: serverTimestamp(),
-      });
+    return () => unsubscribe();
+  }, [chatId]);
 
-      setMessage("");
-    } catch (err) {
-      console.log(err);
-    }
+  const handleSend = async () => {
+    if (!text.trim()) return;
+
+    await sendMessage(chatId, text, userId, userName);
+    setText("");
   };
 
   const renderItem = ({ item }: any) => {
-    const isMe = item.senderId === currentUser?.uid;
+    const isMe = item.senderId === userId;
 
     return (
       <View
         style={[
-          styles.messageBox,
+          styles.messageContainer,
           isMe ? styles.myMessage : styles.otherMessage,
         ]}
       >
-        <Text style={styles.messageText}>{item.text}</Text>
+        {!isMe && (
+          <Text style={styles.senderName}>{item.senderName}</Text>
+        )}
+
+        <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.otherMessageText]}>
+          {item.text}
+        </Text>
       </View>
     );
   };
@@ -89,33 +82,42 @@ export default function ChatScreen({ route }: any) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.name}>{user.name}</Text>
+      <View style={styles.chatHeader}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.backBtn}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {otherUserName || "Chat"}
+        </Text>
+        <View style={styles.backBtn} />
       </View>
 
-      {/* CHAT */}
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.chatArea}
-      />
+      {messages.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No messages yet</Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.list}
+          style={styles.listContainer}
+        />
+      )}
 
-      {/* INPUT */}
-      <View style={styles.inputBox}>
+      <View style={styles.inputContainer}>
         <TextInput
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Message..."
-          placeholderTextColor="#6b7280"
           style={styles.input}
+          value={text}
+          onChangeText={setText}
+          placeholder="Type a message..."
+          placeholderTextColor="#999"
         />
 
-        <TouchableOpacity style={styles.sendBtn} onPress={sendMessage}>
-          <Text style={{ color: "#000", fontWeight: "bold" }}>
-            Send
-          </Text>
+        <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+          <Text style={styles.sendText}>Send</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -125,67 +127,117 @@ export default function ChatScreen({ route }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b0f1a",
+    backgroundColor: "#f2f2f2",
   },
 
-  header: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
+  chatHeader: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
   },
 
-  name: {
-    color: "#38bdf8",
-    fontSize: 18,
-    fontWeight: "bold",
+  backBtn: {
+    color: "#4f46e5",
+    fontSize: 16,
+    fontWeight: "600",
+    minWidth: 50,
   },
 
-  chatArea: {
-    padding: 15,
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#212121",
+    flex: 1,
+    textAlign: "center",
   },
 
-  messageBox: {
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 10,
+  listContainer: {
+    flex: 1,
+  },
+
+  list: {
+    padding: 10,
+    flexGrow: 1,
+  },
+
+  messageContainer: {
+    padding: 10,
+    marginVertical: 5,
+    borderRadius: 10,
     maxWidth: "75%",
   },
 
   myMessage: {
-    backgroundColor: "#38bdf8",
     alignSelf: "flex-end",
+    backgroundColor: "#4f46e5",
   },
 
   otherMessage: {
-    backgroundColor: "#111827",
     alignSelf: "flex-start",
+    backgroundColor: "#fff",
   },
 
   messageText: {
+    fontSize: 16,
+  },
+
+  myMessageText: {
     color: "#fff",
   },
 
-  inputBox: {
+  otherMessageText: {
+    color: "#000",
+  },
+
+  senderName: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 2,
+  },
+
+  inputContainer: {
     flexDirection: "row",
     padding: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#1f2937",
+    backgroundColor: "#fff",
+    alignItems: "center",
   },
 
   input: {
     flex: 1,
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    padding: 10,
-    color: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    marginRight: 10,
   },
 
-  sendBtn: {
-    marginLeft: 10,
-    backgroundColor: "#38bdf8",
+  sendButton: {
+    backgroundColor: "#4f46e5",
     paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
+  },
+
+  sendText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+
+  emptyContainer: {
+    flex: 1,
     justifyContent: "center",
-    borderRadius: 10,
+    alignItems: "center",
+    paddingBottom: 60,
+  },
+
+  emptyText: {
+    color: "#999",
+    fontSize: 16,
   },
 });

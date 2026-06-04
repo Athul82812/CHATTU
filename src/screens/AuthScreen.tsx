@@ -9,11 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-} from "firebase/auth";
+import { supabase } from "../supabase/supabase";
 
 export default function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
@@ -21,8 +17,6 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const auth = getAuth();
 
   const handleAuth = async () => {
     if (!email || !password) {
@@ -35,9 +29,25 @@ export default function AuthScreen() {
 
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+        if (error) throw error;
+
+        if (data.user) {
+          await supabase.from("users").insert({
+            id: data.user.id,
+            email: data.user.email,
+            online: true,
+          });
+        }
       }
     } catch (err: any) {
       setError(err.message);

@@ -7,8 +7,7 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../services/firebase";
+import { supabase } from "../supabase/supabase";
 
 export default function LoginScreen({ navigation }: any) {
   const [email, setEmail] = useState("");
@@ -16,7 +15,11 @@ export default function LoginScreen({ navigation }: any) {
 
   const handleLogin = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
       navigation.replace("Home");
     } catch (err: any) {
       Alert.alert("Login Failed", err.message);

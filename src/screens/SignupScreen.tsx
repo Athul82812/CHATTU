@@ -7,17 +7,16 @@ import {
   Alert,
   StyleSheet,
 } from "react-native";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "../services/firebase";
+import { supabase } from "../supabase/supabase";
 
 export default function SignupScreen({ navigation }: any) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    if (!email || !password) {
+    if (!name || !email || !password) {
       Alert.alert("Error", "Please fill all fields");
       return;
     }
@@ -25,27 +24,38 @@ export default function SignupScreen({ navigation }: any) {
     try {
       setLoading(true);
 
-      const res = await createUserWithEmailAndPassword(
-        auth,
+      // 1️⃣ Create auth user
+      const { data, error } = await supabase.auth.signUp({
         email,
-        password
-      );
+        password,
+      });
 
-      // ✅ SAVE USER IN FIRESTORE (IMPORTANT FIX)
-      await setDoc(doc(db, "users", res.user.uid), {
-        uid: res.user.uid,
-        email: res.user.email,
-        createdAt: serverTimestamp(),
+      if (error) throw error;
+
+      // 2️⃣ If email confirmation is ON, user will be null
+      if (!data.user) {
+        Alert.alert(
+          "Verify Email",
+          "Please verify your email before logging in"
+        );
+        return;
+      }
+
+      // 3️⃣ Insert profile into users table
+      const { error: insertError } = await supabase.from("users").insert({
+        id: data.user.id,
+        name: name.trim(),
+        email: data.user.email,
         online: true,
       });
 
-      Alert.alert("Success", "Account created");
+      if (insertError) throw insertError;
 
-      // safer navigation
+      Alert.alert("Success", "Account created successfully");
       navigation.replace("Login");
 
-    } catch (error: any) {
-      Alert.alert("Signup Failed", error.message);
+    } catch (err: any) {
+      Alert.alert("Signup Failed", err.message);
     } finally {
       setLoading(false);
     }
@@ -56,10 +66,19 @@ export default function SignupScreen({ navigation }: any) {
       <Text style={styles.title}>Create Account</Text>
 
       <TextInput
+        placeholder="Full Name"
+        value={name}
+        onChangeText={setName}
+        autoCapitalize="words"
+        style={styles.input}
+      />
+
+      <TextInput
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
+        keyboardType="email-address"
         style={styles.input}
       />
 
@@ -82,9 +101,7 @@ export default function SignupScreen({ navigation }: any) {
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-        <Text style={styles.link}>
-          Already have account? Login
-        </Text>
+        <Text style={styles.link}>Already have an account? Login</Text>
       </TouchableOpacity>
     </View>
   );
