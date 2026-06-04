@@ -1,11 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import {
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  setAudioModeAsync,
+} from 'expo-audio';
 
 interface MessageBubbleProps {
   text: string;
   isOwnMessage: boolean;
   timestamp: Date;
   isRead?: boolean;
+  audioUrl?: string;
+  duration?: number;
 }
 
 const formatTime = (date: Date): string => {
@@ -16,11 +23,57 @@ const formatTime = (date: Date): string => {
   return `${displayHour}:${minutes} ${ampm}`;
 };
 
+const formatDuration = (seconds: number): string => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+const AudioPlayer: React.FC<{ audioUrl: string; duration?: number; isOwn: boolean }> = ({ audioUrl, duration, isOwn }) => {
+  const player = useAudioPlayer(audioUrl);
+  const status = useAudioPlayerStatus(player);
+
+  const togglePlayback = async () => {
+    try {
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+      });
+      if (status.playing) {
+        player.pause();
+      } else {
+        player.play();
+      }
+    } catch (e) {
+      console.error('Failed to toggle playback:', e);
+    }
+  };
+
+  const progress = status.duration > 0 ? status.currentTime / status.duration : 0;
+  const currentSec = Math.floor(status.currentTime);
+
+  return (
+    <View style={styles.audioContainer}>
+      <TouchableOpacity onPress={togglePlayback} style={styles.playButton}>
+        <Text style={styles.playIcon}>{status.playing ? '⏸' : '▶'}</Text>
+      </TouchableOpacity>
+      <View style={styles.audioTrack}>
+        <View style={[styles.audioProgress, { width: `${Math.min(progress * 100, 100)}%` }]} />
+      </View>
+      <Text style={[styles.audioDuration, isOwn ? styles.ownTime : styles.otherTime]}>
+        {formatDuration(currentSec)} / {formatDuration(duration || Math.floor(status.duration))}
+      </Text>
+    </View>
+  );
+};
+
 const MessageBubble: React.FC<MessageBubbleProps> = ({
   text,
   isOwnMessage,
   timestamp,
   isRead,
+  audioUrl,
+  duration,
 }) => {
   return (
     <View style={[styles.wrapper, isOwnMessage ? styles.wrapperRight : styles.wrapperLeft]}>
@@ -30,9 +83,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           isOwnMessage ? styles.ownBubble : styles.otherBubble,
         ]}
       >
-        <Text style={[styles.messageText, isOwnMessage ? styles.ownText : styles.otherText]}>
-          {text}
-        </Text>
+        {audioUrl ? (
+          <AudioPlayer audioUrl={audioUrl} duration={duration} isOwn={isOwnMessage} />
+        ) : (
+          <Text style={[styles.messageText, isOwnMessage ? styles.ownText : styles.otherText]}>
+            {text}
+          </Text>
+        )}
         <View style={styles.metaRow}>
           <Text style={[styles.timeText, isOwnMessage ? styles.ownTime : styles.otherTime]}>
             {formatTime(timestamp)}
@@ -118,6 +175,43 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#FF8C00',
     fontWeight: '600',
+  },
+  audioContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 180,
+    paddingVertical: 4,
+  },
+  playButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FF8C00',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playIcon: {
+    fontSize: 16,
+    color: '#FFFFFF',
+  },
+  audioTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#E0E0E0',
+    overflow: 'hidden',
+  },
+  audioProgress: {
+    height: '100%',
+    backgroundColor: '#FF8C00',
+    borderRadius: 3,
+  },
+  audioDuration: {
+    fontSize: 11,
+    minWidth: 50,
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
   },
   tail: {
     position: 'absolute',

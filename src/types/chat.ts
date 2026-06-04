@@ -4,6 +4,9 @@ export interface Message {
   senderId: string;
   senderName?: string;
   createdAt?: any;
+  audioUrl?: string;
+  duration?: number;
+  mimeType?: string;
 }
 
 export interface Contact {

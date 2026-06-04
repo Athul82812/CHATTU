@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   FlatList,
   KeyboardAvoidingView,
@@ -13,8 +12,11 @@ import {
 import { supabase } from "../supabase/supabase";
 import {
   sendMessage,
+  sendAudioMessage,
   subscribeToMessages,
 } from "../services/chatService";
+import MessageBubble from "../components/MessageBubble";
+import ChatInput from "../components/ChatInput";
 
 export default function ChatScreen({ route, navigation }: any) {
   const { chatId, userId: paramUserId, userName: paramUserName, otherUserName } = route.params;
@@ -22,7 +24,6 @@ export default function ChatScreen({ route, navigation }: any) {
   const [userName, setUserName] = useState(paramUserName);
 
   const [messages, setMessages] = useState<any[]>([]);
-  const [text, setText] = useState("");
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -49,31 +50,25 @@ export default function ChatScreen({ route, navigation }: any) {
     return () => unsubscribe();
   }, [chatId]);
 
-  const handleSend = async () => {
-    if (!text.trim()) return;
-
+  const handleSend = async (text: string) => {
     await sendMessage(chatId, text, userId, userName);
-    setText("");
+  };
+
+  const handleSendAudio = async (uri: string, duration: number) => {
+    await sendAudioMessage(chatId, uri, duration, userId, userName);
   };
 
   const renderItem = ({ item }: any) => {
     const isMe = item.senderId === userId;
-
     return (
-      <View
-        style={[
-          styles.messageContainer,
-          isMe ? styles.myMessage : styles.otherMessage,
-        ]}
-      >
-        {!isMe && (
-          <Text style={styles.senderName}>{item.senderName}</Text>
-        )}
-
-        <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.otherMessageText]}>
-          {item.text}
-        </Text>
-      </View>
+      <MessageBubble
+        text={item.text}
+        isOwnMessage={isMe}
+        timestamp={new Date(item.createdAt)}
+        isRead={item.isRead}
+        audioUrl={item.audioUrl}
+        duration={item.duration}
+      />
     );
   };
 
@@ -107,19 +102,7 @@ export default function ChatScreen({ route, navigation }: any) {
         />
       )}
 
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Type a message..."
-          placeholderTextColor="#999"
-        />
-
-        <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-          <Text style={styles.sendText}>Send</Text>
-        </TouchableOpacity>
-      </View>
+      <ChatInput onSend={handleSend} onSendAudio={handleSendAudio} />
     </KeyboardAvoidingView>
   );
 }
@@ -163,70 +146,6 @@ const styles = StyleSheet.create({
   list: {
     padding: 10,
     flexGrow: 1,
-  },
-
-  messageContainer: {
-    padding: 10,
-    marginVertical: 5,
-    borderRadius: 10,
-    maxWidth: "75%",
-  },
-
-  myMessage: {
-    alignSelf: "flex-end",
-    backgroundColor: "#4f46e5",
-  },
-
-  otherMessage: {
-    alignSelf: "flex-start",
-    backgroundColor: "#fff",
-  },
-
-  messageText: {
-    fontSize: 16,
-  },
-
-  myMessageText: {
-    color: "#fff",
-  },
-
-  otherMessageText: {
-    color: "#000",
-  },
-
-  senderName: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 2,
-  },
-
-  inputContainer: {
-    flexDirection: "row",
-    padding: 10,
-    backgroundColor: "#fff",
-    alignItems: "center",
-  },
-
-  input: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    marginRight: 10,
-  },
-
-  sendButton: {
-    backgroundColor: "#4f46e5",
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 20,
-  },
-
-  sendText: {
-    color: "#fff",
-    fontWeight: "bold",
   },
 
   emptyContainer: {

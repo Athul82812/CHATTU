@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 import { supabase } from "../supabase/supabase";
 
 export const createChatIfNotExists = async (
@@ -54,6 +55,58 @@ export const sendMessage = async (
     .eq("id", chatId);
 };
 
+export const sendAudioMessage = async (
+  chatId: string,
+  audioUri: string,
+  duration: number,
+  senderId: string,
+  senderName: string
+) => {
+  const fileName = `audio/${chatId}/${senderId}_${Date.now()}.m4a`;
+
+  const audioFile = new File(audioUri);
+  const arrayBuffer = await audioFile.arrayBuffer();
+
+  const { error: uploadError } = await supabase.storage
+    .from("chat_audio")
+    .upload(fileName, arrayBuffer, { contentType: "audio/mp4" });
+
+  if (uploadError) {
+    console.error("Error uploading audio:", uploadError.message);
+    return;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("chat_audio")
+    .getPublicUrl(fileName);
+
+  const audioUrl = urlData.publicUrl;
+
+  const { error: msgError } = await supabase.from("messages").insert({
+    chat_id: chatId,
+    text: "🎤 Voice message",
+    audio_url: audioUrl,
+    duration,
+    mime_type: "audio/mp4",
+    sender_id: senderId,
+    sender_name: senderName,
+  });
+
+  if (msgError) {
+    console.error("Error sending audio message:", msgError.message);
+    return;
+  }
+
+  await supabase
+    .from("chats")
+    .update({
+      last_message: "🎤 Voice message",
+      last_sender_id: senderId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", chatId);
+};
+
 const mapMessage = (m: any) => ({
   id: String(m.id),
   text: m.text,
@@ -62,6 +115,9 @@ const mapMessage = (m: any) => ({
   chatId: m.chat_id,
   isRead: m.is_read,
   createdAt: m.created_at,
+  audioUrl: m.audio_url,
+  duration: m.duration,
+  mimeType: m.mime_type,
 });
 
 export const subscribeToMessages = (

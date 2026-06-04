@@ -4,34 +4,39 @@
     "slug": "chattu",
     "version": "1.0.0",
     "orientation": "portrait",
-
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#FF8C00"
     },
-
-    "assetBundlePatterns": ["**/*"],
-
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.athul.chattu"
+      "bundleIdentifier": "com.athul.chattu",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app requires microphone access to record voice messages."
+      }
     },
-
     "android": {
       "package": "com.athul.chattu",
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FF8C00"
       },
       "statusBarColor": "#FF8C00"
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-audio"
+    ]
   }
 }

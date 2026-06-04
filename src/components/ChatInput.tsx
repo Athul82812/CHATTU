@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   TextInput,
@@ -6,15 +6,57 @@ import {
   StyleSheet,
   Text,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
+import {
+  useAudioRecorder,
+  useAudioRecorderState,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
 
 interface ChatInputProps {
   onSend: (text: string) => void;
+  onSendAudio: (uri: string, duration: number) => void;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
-  const [inputText, setInputText] = useState('');
+const ChatInput: React.FC<ChatInputProps> = ({ onSend, onSendAudio }) => {
+  const [inputText, setInputText] = React.useState('');
+  const recorder = useAudioRecorder(RecordingPresets.LOW_QUALITY);
+  const recorderState = useAudioRecorderState(recorder);
+
+  const startRecording = async () => {
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) return;
+
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+    } catch (e) {
+      console.error('Failed to start recording:', e);
+    }
+  };
+
+  const stopAndSend = useCallback(async () => {
+    if (!recorder.isRecording) return;
+
+    await recorder.stop();
+    const uri = recorder.uri;
+
+    if (uri) {
+      onSendAudio(uri, Math.floor(recorder.currentTime));
+    }
+  }, [recorder, onSendAudio]);
+
+  const cancelRecording = async () => {
+    if (!recorder.isRecording) return;
+    await recorder.stop();
+  };
 
   const handleSend = () => {
     const trimmed = inputText.trim();
@@ -24,10 +66,40 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSend }) => {
   };
 
   const canSend = inputText.trim().length > 0;
+  const isRecording = recorderState.isRecording;
+  const recordingDuration = Math.floor(recorderState.durationMillis / 1000);
+
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  if (isRecording) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.recordingRow}>
+          <TouchableOpacity onPress={cancelRecording} style={styles.cancelBtn}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <View style={styles.recordingIndicator}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingTimer}>{formatDuration(recordingDuration)}</Text>
+          </View>
+          <TouchableOpacity onPress={stopAndSend} style={styles.sendRecordingBtn}>
+            <Text style={styles.sendRecordingText}>Send</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.inputRow}>
+        <TouchableOpacity onPress={startRecording} style={styles.micButton}>
+          <Text style={styles.micIcon}>🎤</Text>
+        </TouchableOpacity>
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.input}
@@ -90,6 +162,24 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     lineHeight: 20,
   },
+  micButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+  },
+  micIcon: {
+    fontSize: 20,
+  },
   sendButton: {
     width: 44,
     height: 44,
@@ -113,6 +203,55 @@ const styles = StyleSheet.create({
   },
   sendIconActive: {
     color: '#FFFFFF',
+  },
+  recordingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    height: 44,
+  },
+  cancelBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  cancelText: {
+    color: '#FF3B30',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recordingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF3B30',
+  },
+  recordingTimer: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#212121',
+    fontVariant: ['tabular-nums'],
+  },
+  sendRecordingBtn: {
+    backgroundColor: '#FF8C00',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#FF8C00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  sendRecordingText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

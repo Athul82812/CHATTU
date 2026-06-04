@@ -30,6 +30,9 @@ CREATE TABLE public.messages (
   text TEXT NOT NULL,
   sender_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   sender_name TEXT,
+  audio_url TEXT,
+  duration REAL,
+  mime_type TEXT DEFAULT 'audio/mp4',
   is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -91,4 +94,21 @@ CREATE POLICY "profiles_insert" ON storage.objects
 CREATE POLICY "profiles_update" ON storage.objects
   FOR UPDATE USING (
     bucket_id = 'profiles' AND auth.role() = 'authenticated'
+  );
+
+-- Storage bucket for chat audio messages
+INSERT INTO storage.buckets (id, name, public) VALUES ('chat_audio', 'chat_audio', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "chat_audio_select" ON storage.objects
+  FOR SELECT USING (bucket_id = 'chat_audio');
+
+CREATE POLICY "chat_audio_insert" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'chat_audio' AND auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "chat_audio_update" ON storage.objects
+  FOR UPDATE USING (
+    bucket_id = 'chat_audio' AND auth.role() = 'authenticated'
   );
